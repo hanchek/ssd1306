@@ -15,7 +15,9 @@ void Display::Init(I2C_HandleTypeDef* hi2c)
     SetPreChargePeriod();
     SetVComhDeselectLevel();
 
-    WriteCommand(Command::HorizontalMode);
+    WriteCommand(Command::VerticalMode);
+    ResetColumnAddress();
+    ResetPageAddress();
     WriteCommand(Command::SetPageStartAddress);
     SetLowColumnStartAddress(0);
     SetHighColumnStartAddress(0);
@@ -27,6 +29,9 @@ void Display::Init(I2C_HandleTypeDef* hi2c)
     WriteCommand(Command::NormalDisplay);
     WriteCommand(Command::ResumeToRAMContent);
     WriteCommand(Command::SetDisplayOn);
+
+    FillBlack();
+    UpdateScreen();
 }
 
 void Display::WriteCommand(uint8_t* command, size_t size)
@@ -42,6 +47,26 @@ void Display::WriteCommand(uint8_t command)
 void Display::WriteData(uint8_t* data, size_t size)
 {
     HAL_I2C_Mem_Write(_hi2c, SSD1306_I2C_ADDRESS, static_cast<uint8_t>(ControlByte::Data), 1, data, size, HAL_MAX_DELAY);
+}
+
+void Display::UpdateScreen()
+{
+    ResetColumnAddress();
+    ResetPageAddress();
+
+    WriteData(_buffer.data(), _buffer.size());
+}
+
+void Display::ResetColumnAddress()
+{
+    const uint8_t command[3] = {Command::SetColumnAddress, 0, DISPLAY_WIDTH - 1};
+    WriteCommand(command);
+}
+
+void Display::ResetPageAddress()
+{
+    const uint8_t command[3] = {Command::SetPageAddress, 0, (DISPLAY_HEIGHT / 8) - 1};
+    WriteCommand(command);
 }
 
 void Display::SetContrast(uint8_t contrast)
@@ -105,4 +130,33 @@ void Display::SetVComhDeselectLevel(VComhDeselectLevel level)
 {
     const uint8_t command[2] = {Command::SetVComhDeselectLevel, static_cast<uint8_t>(level)};
     WriteCommand(command);
+}
+
+void Display::FillBlack()
+{
+    _buffer.fill(0x00);
+}
+
+void Display::DrawPixel(uint8_t x, uint8_t y)
+{
+    if (x >= DISPLAY_WIDTH || y >= DISPLAY_HEIGHT)
+    {
+        return;
+    }
+
+    const size_t index = x * DISPLAY_HEIGHT + y;
+    const uint8_t bitPosition = y % 8;
+
+    _buffer[index / 8] |= (1 << bitPosition);
+}
+
+void Display::DrawRect(uint8_t x, uint8_t y, uint8_t width, uint8_t height)
+{
+    for (uint8_t i = x; i < x + width; ++i)
+    {
+        for (uint8_t j = y; j < y + height; ++j)
+        {
+            DrawPixel(i, j);
+        }
+    }
 }

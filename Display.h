@@ -1,11 +1,13 @@
 #include <cstdint>
 #include <cstring>
+#include <array>
 
 #include <stm32f4xx_hal.h>
 
 // docs: https://cdn-shop.adafruit.com/datasheets/SSD1306.pdf
 
 constexpr uint16_t SSD1306_I2C_ADDRESS = 0x3C << 1; // 0b111100
+constexpr uint8_t DISPLAY_WIDTH = 128;
 constexpr uint8_t DISPLAY_HEIGHT = 64;
 
 // Control byte consists of Co and D/C# bits following by six "0" bits
@@ -35,6 +37,9 @@ namespace Command
     constexpr uint8_t HorizontalMode[2] = {0x20, 0x00};
     constexpr uint8_t VerticalMode[2] = {0x20, 0x01};
     constexpr uint8_t PageMode[2] = {0x20, 0x02};
+
+    constexpr uint8_t SetColumnAddress = 0x21; // 3 bytes command: second byte is start column, third byte is end column
+    constexpr uint8_t SetPageAddress = 0x22; // 3 bytes command: second byte is start page, third byte is end page
 
     constexpr uint8_t SetPageStartAddress = 0xB0; // 3 bits for page start address, so 0xB0 to 0xB7. page 0 to 7
 
@@ -75,6 +80,10 @@ class Display
         }
 
         void WriteData(uint8_t* data, size_t size);
+
+        void UpdateScreen();
+        void ResetColumnAddress();
+        void ResetPageAddress();
 
         void SetContrast(uint8_t contrast);
         void SetDisplayOffset(uint8_t offset);
@@ -126,6 +135,14 @@ class Display
         * @note 0.83 is lower contrast, lower power.
         */
         void SetVComhDeselectLevel(VComhDeselectLevel level = VComhDeselectLevel::VComh0_77Vcc);
+
+        void FillBlack();
+
+        void DrawPixel(uint8_t x, uint8_t y);
+
+        void DrawRect(uint8_t x, uint8_t y, uint8_t width, uint8_t height);
+
+        std::array<uint8_t, DISPLAY_WIDTH * DISPLAY_HEIGHT / 8> _buffer;
 
     protected:
         I2C_HandleTypeDef* _hi2c;
