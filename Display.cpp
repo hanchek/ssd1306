@@ -24,7 +24,7 @@ void Display::Init(I2C_HandleTypeDef* hi2c)
     SetDisplayStartLine(0);
 
     WriteCommand(Command::SetSegmentRemap127To0);
-    WriteCommand(Command::SetComOutputScanDirectionReversed);
+    WriteCommand(Command::SetComOutputScanDirection);
 
     WriteCommand(Command::NormalDisplay);
     WriteCommand(Command::ResumeToRAMContent);
