@@ -15,13 +15,13 @@ void Display::Init(I2C_HandleTypeDef* hi2c)
     SetPreChargePeriod();
     SetVComhDeselectLevel();
 
-    WriteCommand(Command::VerticalMode);
-    ResetColumnAddress();
-    ResetPageAddress();
-    WriteCommand(Command::SetPageStartAddress);
+    WriteCommand(Command::PageMode);
+    SetPageStartAddress(0);
     SetLowColumnStartAddress(0);
     SetHighColumnStartAddress(0);
     SetDisplayStartLine(0);
+    ResetColumnAddress();
+    ResetPageAddress();
 
     WriteCommand(Command::SetSegmentRemap127To0);
     WriteCommand(Command::SetComOutputScanDirection);
@@ -51,10 +51,17 @@ void Display::WriteData(uint8_t* data, size_t size)
 
 void Display::UpdateScreen()
 {
-    ResetColumnAddress();
-    ResetPageAddress();
-
-    WriteData(_buffer.data(), _buffer.size());
+    for (int i = 0; i < PAGES_COUNT; ++i)
+    {
+        if (_dirtyFlags[i])
+        {
+            SetPageStartAddress(i);
+            SetLowColumnStartAddress(0);
+            SetHighColumnStartAddress(0);
+            WriteData(_buffer.data() + i * DISPLAY_WIDTH, DISPLAY_WIDTH);
+            _dirtyFlags[i] = false;
+        }
+    }
 }
 
 void Display::ResetColumnAddress()
@@ -65,7 +72,13 @@ void Display::ResetColumnAddress()
 
 void Display::ResetPageAddress()
 {
-    const uint8_t command[3] = {Command::SetPageAddress, 0, (DISPLAY_HEIGHT / 8) - 1};
+    const uint8_t command[3] = {Command::SetPageAddress, 0, PAGES_COUNT - 1};
+    WriteCommand(command);
+}
+
+void Display::SetPageStartAddress(uint8_t page)
+{
+    const uint8_t command = Command::SetPageStartAddress | page;
     WriteCommand(command);
 }
 
@@ -135,39 +148,56 @@ void Display::SetVComhDeselectLevel(VComhDeselectLevel level)
 void Display::FillBlack()
 {
     _buffer.fill(0x00);
+    _dirtyFlags.fill(true);
 }
 
-void Display::DrawPixel(uint8_t x, uint8_t y)
+void Display::DrawImage(const std::array<uint8_t, PAGES_SIZE>& image)
+{
+    _buffer = image;
+    _dirtyFlags.fill(true);
+}
+
+void Display::DrawPixel(uint8_t x, uint8_t y, bool color)
 {
     if (x >= DISPLAY_WIDTH || y >= DISPLAY_HEIGHT)
     {
         return;
     }
 
-    const size_t index = x * DISPLAY_HEIGHT + y;
+    const uint8_t page = y / 8;
+    const size_t index = page * DISPLAY_WIDTH + x;
     const uint8_t bitPosition = y % 8;
 
-    _buffer[index / 8] |= (1 << bitPosition);
+    if (color)
+    {
+        _buffer[index] |= (1 << bitPosition);
+    }
+    else
+    {
+        _buffer[index] &= ~(1 << bitPosition);
+    }
+
+    _dirtyFlags[page] = true;
 }
 
-void Display::DrawRect(uint8_t x, uint8_t y, uint8_t width, uint8_t height)
+void Display::DrawRect(uint8_t x, uint8_t y, uint8_t width, uint8_t height, bool color)
 {
     for (uint8_t i = x; i < x + width; ++i)
     {
         for (uint8_t j = y; j < y + height; ++j)
         {
-            DrawPixel(i, j);
+            DrawPixel(i, j, color);
         }
     }
 }
 
-void Display::DrawCircle(uint8_t x0, uint8_t y0, uint8_t r, bool fill)
+void Display::DrawCircle(uint8_t x0, uint8_t y0, uint8_t r, bool color, bool fill)
 {
     int x = 0;
     int y = r;
     int d = 3 - 2 * r;
 
-    fill ? FillOctant(x0, y0, x, y) : DrawOctant(x0, y0, x, y);
+    fill ? FillOctant(x0, y0, x, y, color) : DrawOctant(x0, y0, x, y, color);
 
     while (y >= x)
     {
@@ -183,32 +213,32 @@ void Display::DrawCircle(uint8_t x0, uint8_t y0, uint8_t r, bool fill)
 
         x++;
 
-        fill ? FillOctant(x0, y0, x, y) : DrawOctant(x0, y0, x, y);
+        fill ? FillOctant(x0, y0, x, y, color) : DrawOctant(x0, y0, x, y, color);
     }
 }
 
-void Display::DrawOctant(uint8_t x0, uint8_t y0, uint8_t x, uint8_t y)
+void Display::DrawOctant(uint8_t x0, uint8_t y0, uint8_t x, uint8_t y, bool color)
 {
-    DrawPixel(x0 + x, y0 + y);
-    DrawPixel(x0 - x, y0 + y);
-    DrawPixel(x0 + x, y0 - y);
-    DrawPixel(x0 - x, y0 - y);
-    DrawPixel(x0 + y, y0 + x);
-    DrawPixel(x0 - y, y0 + x);
-    DrawPixel(x0 + y, y0 - x);
-    DrawPixel(x0 - y, y0 - x);
+    DrawPixel(x0 + x, y0 + y, color);
+    DrawPixel(x0 - x, y0 + y, color);
+    DrawPixel(x0 + x, y0 - y, color);
+    DrawPixel(x0 - x, y0 - y, color);
+    DrawPixel(x0 + y, y0 + x, color);
+    DrawPixel(x0 - y, y0 + x, color);
+    DrawPixel(x0 + y, y0 - x, color);
+    DrawPixel(x0 - y, y0 - x, color);
 }
 
-void Display::FillOctant(uint8_t x0, uint8_t y0, uint8_t x, uint8_t y)
+void Display::FillOctant(uint8_t x0, uint8_t y0, uint8_t x, uint8_t y, bool color)
 {
     for (int i = x0 - x; i <= x0 + x; ++i)
     {
-        DrawPixel(i, y0 + y);
-        DrawPixel(i, y0 - y);
+        DrawPixel(i, y0 + y, color);
+        DrawPixel(i, y0 - y, color);
     }
     for (int i = x0 - y; i <= x0 + y; ++i)
     {
-        DrawPixel(i, y0 + x);
-        DrawPixel(i, y0 - x);
+        DrawPixel(i, y0 + x, color);
+        DrawPixel(i, y0 - x, color);
     }
 }

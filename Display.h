@@ -11,6 +11,8 @@
 constexpr uint16_t SSD1306_I2C_ADDRESS = 0x3C << 1; // 0b111100
 constexpr uint8_t DISPLAY_WIDTH = 128;
 constexpr uint8_t DISPLAY_HEIGHT = 64;
+constexpr uint8_t PAGES_COUNT = DISPLAY_HEIGHT / 8;
+constexpr std::size_t PAGES_SIZE = DISPLAY_WIDTH * PAGES_COUNT;
 
 // Control byte consists of Co and D/C# bits following by six "0" bits
 enum class ControlByte : uint8_t
@@ -86,6 +88,7 @@ class Display
         void UpdateScreen();
         void ResetColumnAddress();
         void ResetPageAddress();
+        void SetPageStartAddress(uint8_t page);
 
         void SetContrast(uint8_t contrast);
         void SetDisplayOffset(uint8_t offset);
@@ -140,17 +143,20 @@ class Display
 
         void FillBlack();
 
-        void DrawPixel(uint8_t x, uint8_t y);
+        void DrawImage(const std::array<uint8_t, PAGES_SIZE>& image);
 
-        void DrawRect(uint8_t x, uint8_t y, uint8_t width, uint8_t height);
+        void DrawPixel(uint8_t x, uint8_t y, bool color = true);
 
-        void DrawCircle(uint8_t x0, uint8_t y0, uint8_t r, bool fill = false);
+        void DrawRect(uint8_t x, uint8_t y, uint8_t width, uint8_t height, bool color = true);
 
-        std::array<uint8_t, DISPLAY_WIDTH * DISPLAY_HEIGHT / 8> _buffer;
+        void DrawCircle(uint8_t x0, uint8_t y0, uint8_t r, bool color = true, bool fill = false);
 
     protected:
-        void DrawOctant(uint8_t x0, uint8_t y0, uint8_t x, uint8_t y);
-        void FillOctant(uint8_t x0, uint8_t y0, uint8_t x, uint8_t y);
+        void DrawOctant(uint8_t x0, uint8_t y0, uint8_t x, uint8_t y, bool color);
+        void FillOctant(uint8_t x0, uint8_t y0, uint8_t x, uint8_t y, bool color);
+
+        std::array<uint8_t, PAGES_SIZE> _buffer;
+        std::array<bool, PAGES_COUNT> _dirtyFlags;
 
         I2C_HandleTypeDef* _hi2c;
 };
