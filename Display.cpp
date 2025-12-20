@@ -160,3 +160,55 @@ void Display::DrawRect(uint8_t x, uint8_t y, uint8_t width, uint8_t height)
         }
     }
 }
+
+void Display::DrawCircle(uint8_t x0, uint8_t y0, uint8_t r, bool fill)
+{
+    int x = 0;
+    int y = r;
+    int d = 3 - 2 * r;
+
+    fill ? FillOctant(x0, y0, x, y) : DrawOctant(x0, y0, x, y);
+
+    while (y >= x)
+    {
+        if (d > 0)
+        {
+            y--;
+            d += 4 * (x - y) + 10;
+        }
+        else
+        {
+            d += 4 * x + 6;
+        }
+
+        x++;
+
+        fill ? FillOctant(x0, y0, x, y) : DrawOctant(x0, y0, x, y);
+    }
+}
+
+void Display::DrawOctant(uint8_t x0, uint8_t y0, uint8_t x, uint8_t y)
+{
+    DrawPixel(x0 + x, y0 + y);
+    DrawPixel(x0 - x, y0 + y);
+    DrawPixel(x0 + x, y0 - y);
+    DrawPixel(x0 - x, y0 - y);
+    DrawPixel(x0 + y, y0 + x);
+    DrawPixel(x0 - y, y0 + x);
+    DrawPixel(x0 + y, y0 - x);
+    DrawPixel(x0 - y, y0 - x);
+}
+
+void Display::FillOctant(uint8_t x0, uint8_t y0, uint8_t x, uint8_t y)
+{
+    for (int i = x0 - x; i <= x0 + x; ++i)
+    {
+        DrawPixel(i, y0 + y);
+        DrawPixel(i, y0 - y);
+    }
+    for (int i = x0 - y; i <= x0 + y; ++i)
+    {
+        DrawPixel(i, y0 + x);
+        DrawPixel(i, y0 - x);
+    }
+}

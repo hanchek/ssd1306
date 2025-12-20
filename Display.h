@@ -1,3 +1,5 @@
+#pragma once
+
 #include <cstdint>
 #include <cstring>
 #include <array>
@@ -142,8 +144,13 @@ class Display
 
         void DrawRect(uint8_t x, uint8_t y, uint8_t width, uint8_t height);
 
+        void DrawCircle(uint8_t x0, uint8_t y0, uint8_t r, bool fill = false);
+
         std::array<uint8_t, DISPLAY_WIDTH * DISPLAY_HEIGHT / 8> _buffer;
 
     protected:
+        void DrawOctant(uint8_t x0, uint8_t y0, uint8_t x, uint8_t y);
+        void FillOctant(uint8_t x0, uint8_t y0, uint8_t x, uint8_t y);
+
         I2C_HandleTypeDef* _hi2c;
 };
