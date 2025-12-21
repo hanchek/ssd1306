@@ -157,6 +157,27 @@ void Display::DrawImage(const std::array<uint8_t, PAGES_SIZE>& image)
     _dirtyFlags.fill(true);
 }
 
+void Display::DrawImage(uint8_t startColumn, uint8_t startPage, const uint8_t* image, size_t width, size_t height)
+{
+    if (startPage + height > PAGES_COUNT || startColumn + width > DISPLAY_WIDTH)
+    {
+        return;
+    }
+
+    for (uint8_t j = 0; j < height; ++j)
+    {
+        const size_t page = startPage + j;
+        for (uint8_t i = 0; i < width; ++i)
+        {
+            const size_t column = startColumn + i;
+            const size_t index = page * DISPLAY_WIDTH + column;
+            _buffer[index] = image[j * width + i];
+        }
+
+        _dirtyFlags[page] = true;
+    }
+}
+
 void Display::DrawPixel(uint8_t x, uint8_t y, bool color)
 {
     if (x >= DISPLAY_WIDTH || y >= DISPLAY_HEIGHT)

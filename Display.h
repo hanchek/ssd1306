@@ -145,6 +145,8 @@ class Display
 
         void DrawImage(const std::array<uint8_t, PAGES_SIZE>& image);
 
+        void DrawImage(uint8_t startColumn, uint8_t startPage, const uint8_t* image, size_t width, size_t height);
+
         void DrawPixel(uint8_t x, uint8_t y, bool color = true);
 
         void DrawRect(uint8_t x, uint8_t y, uint8_t width, uint8_t height, bool color = true);
