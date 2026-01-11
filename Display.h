@@ -3,8 +3,11 @@
 #include <cstdint>
 #include <cstring>
 #include <array>
+#include <string>
 
 #include <stm32f4xx_hal.h>
+
+#include "Font.h"
 
 // docs: https://cdn-shop.adafruit.com/datasheets/SSD1306.pdf
 
@@ -70,6 +73,10 @@ enum class VComhDeselectLevel : uint8_t
 class Display
 {
     public:
+        static Display* InitInstance(I2C_HandleTypeDef* hi2c);
+        static void FreeInstance();
+        static void OnI2CTransferComplete(I2C_HandleTypeDef* hi2c);
+
         void Init(I2C_HandleTypeDef* hi2c);
 
         void WriteCommand(uint8_t* command, size_t size);
@@ -84,8 +91,12 @@ class Display
         }
 
         void WriteData(uint8_t* data, size_t size);
+        void WriteDataDMA(uint8_t* data, size_t size);
 
         void UpdateScreen();
+        void UpdateScreenDMA();
+        bool IsTransferInProgress() const { return _isTransferInProgress; }
+
         void ResetColumnAddress();
         void ResetPageAddress();
         void SetPageStartAddress(uint8_t page);
@@ -153,12 +164,24 @@ class Display
 
         void DrawCircle(uint8_t x0, uint8_t y0, uint8_t r, bool color = true, bool fill = false);
 
+        void DrawChar(char ch, uint8_t x, uint8_t y, const Font& font, bool color = true);
+
+        void DrawString(const std::string& str, uint8_t x, uint8_t y, const Font& font, bool color = true);
+
     protected:
         void DrawOctant(uint8_t x0, uint8_t y0, uint8_t x, uint8_t y, bool color);
         void FillOctant(uint8_t x0, uint8_t y0, uint8_t x, uint8_t y, bool color);
 
-        std::array<uint8_t, PAGES_SIZE> _buffer;
+        static Display* gInstance;
+
+        std::array<uint8_t, PAGES_SIZE> _buffer1;
+        std::array<uint8_t, PAGES_SIZE> _buffer2;
+        std::array<uint8_t, PAGES_SIZE> *_currentBuffer = &_buffer1;
+        std::array<uint8_t, PAGES_SIZE> *_nextBuffer = &_buffer2;
+
         std::array<bool, PAGES_COUNT> _dirtyFlags;
 
         I2C_HandleTypeDef* _hi2c;
+
+        volatile bool _isTransferInProgress = false;
 };

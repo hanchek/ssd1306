@@ -1,5 +1,34 @@
 #include "Display.h"
 
+Display* Display::gInstance = nullptr;
+
+Display* Display::InitInstance(I2C_HandleTypeDef* hi2c)
+{
+    if (gInstance == nullptr)
+    {
+        gInstance = new Display();
+        gInstance->Init(hi2c);
+        HAL_I2C_RegisterCallback(hi2c, HAL_I2C_MEM_TX_COMPLETE_CB_ID, Display::OnI2CTransferComplete);
+    }
+    return gInstance;
+}
+
+void Display::FreeInstance()
+{
+    if (gInstance)
+    {
+        delete gInstance;
+    }
+}
+
+void Display::OnI2CTransferComplete(I2C_HandleTypeDef* hi2c)
+{
+    if (gInstance && hi2c == gInstance->_hi2c)
+    {
+        gInstance->_isTransferInProgress = false;
+    }
+}
+
 void Display::Init(I2C_HandleTypeDef* hi2c)
 {
     _hi2c = hi2c;
@@ -15,7 +44,7 @@ void Display::Init(I2C_HandleTypeDef* hi2c)
     SetPreChargePeriod();
     SetVComhDeselectLevel();
 
-    WriteCommand(Command::PageMode);
+    WriteCommand(Command::HorizontalMode);
     SetPageStartAddress(0);
     SetLowColumnStartAddress(0);
     SetHighColumnStartAddress(0);
@@ -49,6 +78,11 @@ void Display::WriteData(uint8_t* data, size_t size)
     HAL_I2C_Mem_Write(_hi2c, SSD1306_I2C_ADDRESS, static_cast<uint8_t>(ControlByte::Data), 1, data, size, HAL_MAX_DELAY);
 }
 
+void Display::WriteDataDMA(uint8_t* data, size_t size)
+{
+    HAL_I2C_Mem_Write_DMA(_hi2c, SSD1306_I2C_ADDRESS, static_cast<uint8_t>(ControlByte::Data), 1, data, size);
+}
+
 void Display::UpdateScreen()
 {
     for (int i = 0; i < PAGES_COUNT; ++i)
@@ -58,10 +92,24 @@ void Display::UpdateScreen()
             SetPageStartAddress(i);
             SetLowColumnStartAddress(0);
             SetHighColumnStartAddress(0);
-            WriteData(_buffer.data() + i * DISPLAY_WIDTH, DISPLAY_WIDTH);
+            WriteData(_nextBuffer->data() + i * DISPLAY_WIDTH, DISPLAY_WIDTH);
             _dirtyFlags[i] = false;
         }
     }
+}
+
+void Display::UpdateScreenDMA()
+{
+    if (_isTransferInProgress)
+    {
+        return;
+    }
+    _isTransferInProgress = true;
+    std::swap(_currentBuffer, _nextBuffer);
+    SetPageStartAddress(0);
+    SetLowColumnStartAddress(0);
+    SetHighColumnStartAddress(0);
+    WriteDataDMA(_currentBuffer->data(), PAGES_SIZE);
 }
 
 void Display::ResetColumnAddress()
@@ -147,13 +195,13 @@ void Display::SetVComhDeselectLevel(VComhDeselectLevel level)
 
 void Display::FillBlack()
 {
-    _buffer.fill(0x00);
+    _nextBuffer->fill(0x00);
     _dirtyFlags.fill(true);
 }
 
 void Display::DrawImage(const std::array<uint8_t, PAGES_SIZE>& image)
 {
-    _buffer = image;
+    *_nextBuffer = image;
     _dirtyFlags.fill(true);
 }
 
@@ -171,7 +219,7 @@ void Display::DrawImage(uint8_t startColumn, uint8_t startPage, const uint8_t* i
         {
             const size_t column = startColumn + i;
             const size_t index = page * DISPLAY_WIDTH + column;
-            _buffer[index] = image[j * width + i];
+            (*_nextBuffer)[index] = image[j * width + i];
         }
 
         _dirtyFlags[page] = true;
@@ -191,11 +239,11 @@ void Display::DrawPixel(uint8_t x, uint8_t y, bool color)
 
     if (color)
     {
-        _buffer[index] |= (1 << bitPosition);
+        (*_nextBuffer)[index] |= (1 << bitPosition);
     }
     else
     {
-        _buffer[index] &= ~(1 << bitPosition);
+        (*_nextBuffer)[index] &= ~(1 << bitPosition);
     }
 
     _dirtyFlags[page] = true;
@@ -235,6 +283,43 @@ void Display::DrawCircle(uint8_t x0, uint8_t y0, uint8_t r, bool color, bool fil
         x++;
 
         fill ? FillOctant(x0, y0, x, y, color) : DrawOctant(x0, y0, x, y, color);
+    }
+}
+
+void Display::DrawChar(char ch, uint8_t x, uint8_t y, const Font& font, bool color)
+{
+    if (ch < 32 || ch > 126)
+    {
+        return;
+    }
+
+    if (x + font.width > DISPLAY_WIDTH || y + font.height > DISPLAY_HEIGHT)
+    {
+        return;
+    }
+
+    for (uint8_t i = 0; i < font.height; i++)
+    {
+        const uint16_t b = font.data[(ch - 32) * font.height + i];
+        for (uint8_t j = 0; j < font.width; j++)
+        {
+            if ((b << j) & 0x8000)
+            {
+                DrawPixel(x + j, y + (font.height - 1 - i), color);
+            }
+            else
+            {
+                DrawPixel(x + j, y + (font.height - 1 - i), !color);
+            }
+        }
+    }
+}
+
+void Display::DrawString(const std::string& str, uint8_t x, uint8_t y, const Font& font, bool color)
+{
+    for (size_t i = 0; i < str.length(); ++i)
+    {
+        DrawChar(str[i], x + i * font.width, y, font, color);
     }
 }
 
