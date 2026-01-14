@@ -106,9 +106,8 @@ void Display::UpdateScreenDMA()
     }
     _isTransferInProgress = true;
     std::swap(_currentBuffer, _nextBuffer);
-    SetPageStartAddress(0);
-    SetLowColumnStartAddress(0);
-    SetHighColumnStartAddress(0);
+    ResetColumnAddress();
+    ResetPageAddress();
     WriteDataDMA(_currentBuffer->data(), PAGES_SIZE);
 }
 
